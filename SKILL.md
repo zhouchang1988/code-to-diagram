@@ -1,8 +1,8 @@
 ---
 name: "code-to-diagram"
-description: "分析源代码逻辑，生成包含 Mermaid 流程图（.mmd）的 markdown 文件并渲染为 PNG 图片。支持流程图、状态机、时序图、架构图等多种图表类型。"
-version: "1.0.0"
-tags: ["diagram", "mermaid", "flowchart", "visualization", "code-analysis"]
+description: "分析源代码逻辑，生成 Mermaid 流程图或 SVG 架构图并渲染为 PNG 图片。支持 15 种主题、5 种视觉风格、语义图形体系和 40+ 产品图标。"
+version: "3.0.0"
+tags: ["diagram", "mermaid", "svg", "flowchart", "visualization", "code-analysis", "architecture", "beautiful-mermaid"]
 bindShells: ["ClaudeCode"]
 ---
 
@@ -10,18 +10,49 @@ bindShells: ["ClaudeCode"]
 
 分析指定目录或文件的源代码，提取控制流 / 数据流逻辑，输出两个文件：
 
-1. **Markdown 文档**（`.md`）：包含 Mermaid 源码（可在支持 Mermaid 的编辑器 / GitHub 中直接预览）
+1. **Markdown 文档**（`.md`）：包含图表源码
 2. **渲染后的 PNG 图片**（高清）
 
-两个文件默认保存在当前工作目录，也可通过 `--output-dir` 指定任意目录。
+支持两种渲染引擎：
+
+| 引擎 | 输入 | 渲染方式 | 适用场景 |
+|------|------|----------|----------|
+| **Mermaid**（默认） | `.mmd` | beautiful-mermaid → SVG → rsvg-convert → PNG | 流程图、时序图、类图、状态图、ER 图、XY 图 |
+| **SVG** | `.svg` | rsvg-convert → PNG | 架构图、AI 系统图、需要品牌图标或定制风格的图表 |
+
+> Mermaid 引擎默认使用 [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) 渲染，提供 15 种精美主题。
+> 不支持的图表类型（gantt、mindmap、pie、journey、gitgraph）自动回退到 mmdc。
 
 ---
 
-## Claude 使用本 Skill 的步骤
+## 第一步 —— 读取并分析代码
 
-### 第一步 —— 读取并分析代码
+使用 `Read`、`Glob`、`Grep` 工具理解代码结构，识别主要逻辑模式。
 
-使用 `Read`、`Glob`、`Grep` 工具理解代码结构，识别主要逻辑模式：
+---
+
+## 第二步 —— 选择引擎
+
+### 使用 Mermaid 引擎
+
+- 标准流程图、时序图、类图、状态图、ER 图、XY 图表
+- 用户未要求特定视觉风格
+- 快速、美观的主题化图表
+
+### 使用 SVG 引擎
+
+- 架构图需要产品图标（OpenAI、AWS、PostgreSQL 等）
+- AI/Agent 系统图需要语义图形（六边形 Agent、圆柱向量库等）
+- 用户要求特定风格（dark-terminal、blueprint、glassmorphism 等）
+- 需要精细布局控制
+
+---
+
+## 第三步 A —— Mermaid 路径
+
+### 生成 Mermaid 源码
+
+根据分析结果编写 Mermaid 图表源码。
 
 | 代码模式 | 推荐 Mermaid 图表类型 |
 |---------|----------------------|
@@ -30,164 +61,231 @@ bindShells: ["ClaudeCode"]
 | 接口 / 消息传递 | `sequenceDiagram` |
 | 实体关系 | `erDiagram` |
 | 简单流程 | `flowchart LR` |
-| **系统架构 / 分层架构** | **`flowchart TB` + `subgraph`** |
-| **微服务架构** | **`flowchart TB` + `subgraph` 或 `C4Container`** |
-| **部署架构** | **`flowchart TB`** |
+| 系统架构 / 分层架构 | `flowchart TB` + `subgraph` |
+| 微服务架构 | `flowchart TB` + `subgraph` 或 `C4Container` |
+| 数据趋势 / 图表 | `xychart-beta` |
 
-**识别架构图的信号**：
-- 用户明确要求"架构图"、"系统图"、"部署图"、"服务拓扑"
-- 代码有多层目录结构（如 `controllers/`、`services/`、`models/`、`repositories/`）
-- 代码有微服务边界或模块间调用
-- 需要展示系统组件及其依赖关系
+**语言规则**：节点标签、连线说明**必须使用中文**。代码标识符保留原文。
 
-### 第二步 —— 生成 Mermaid 源码
+**换行规则**：节点文本中使用 `<br/>` 而非 `\n`。
 
-根据分析结果，编写完整的 Mermaid 图表源码。
+### 选择主题
 
-**重要：语言规则**
-- 图表中的文字描述**必须使用中文**，包括节点标签、连线说明、注释等。
-- 以下内容保留原文（不翻译）：代码中的类名、函数名、变量名、枚举值、协议名等专有标识符。
-- 示例：
-  - 正确：`A["初始化 TaskManager"] --> B{"检查 isRunning 状态"}`
-  - 错误：`A["Initialize TaskManager"] --> B{"Check isRunning status"}`
+15 个内置主题，根据场景推荐：
 
-**重要：换行规则**
-- 如果需要在节点文本 / 标签中显示多行文字，**必须使用 `<br/>` 而不是 `\n`**。
-  - 正确：`A["第一行<br/>第二行"]`
-  - 错误：`A["第一行\n第二行"]`
-- Mermaid 语句之间用正常的换行分隔即可。
+| 主题 | 类型 | 推荐场景 |
+|------|------|----------|
+| `github-dark`（默认） | 暗色 | GitHub README、技术文档 |
+| `github-light` | 亮色 | 明亮文档、演示文稿 |
+| `tokyo-night` | 暗色 | 优雅暗色、博客 |
+| `tokyo-night-storm` | 暗色 | Tokyo Night 变体 |
+| `tokyo-night-light` | 亮色 | Tokyo Night 亮色 |
+| `catppuccin-mocha` | 暗色 | 温暖暗色 |
+| `catppuccin-latte` | 亮色 | 温暖亮色 |
+| `nord` | 暗色 | 冷色调、北欧风 |
+| `nord-light` | 亮色 | 冷色调亮色 |
+| `dracula` | 暗色 | 经典暗色 |
+| `one-dark` | 暗色 | VS Code 风格 |
+| `solarized-dark` | 暗色 | 经典 Solarized |
+| `solarized-light` | 亮色 | 经典 Solarized 亮色 |
+| `zinc-dark` | 暗色 | 极简暗色 |
+| `zinc-light` | 亮色 | 极简亮色 |
 
-### 第三步 —— 写入 .mmd 文件并调用渲染脚本
+**主题快速判断**：
+- 用户说"暗色/dark/GitHub" → `github-dark`
+- 用户说"亮色/light/明亮" → `github-light`
+- 用户说"优雅/elegant" → `tokyo-night`
+- 用户说"温暖/warm/mocha" → `catppuccin-mocha`
+- 用户说"冷色/cold/北欧" → `nord`
+- 用户说"紫色/dracula" → `dracula`
+- 用户说"简约/minimal" → `zinc-dark` 或 `zinc-light`
+- 默认 → `github-dark`
 
-**推荐方式**：先用 `Write` 工具将 Mermaid 源码写入 `.mmd` 文件，然后用 `--file` 参数调用渲染脚本。这样可以避免 shell 转义问题，也能正确处理各种特殊字符。
+### 写入 .mmd 文件并渲染
+
+先用 `Write` 工具将 Mermaid 源码写入 `.mmd` 文件，然后调用：
 
 ```bash
 node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
   --file <路径/diagram.mmd> \
+  --theme <主题名> \
   --name <输出文件基础名> \
   --output-dir <保存目录>
 ```
 
-也可以用 `--content` 传入内联源码（脚本会自动将字面 `\n` 转换为真正换行）：
+---
+
+## 第三步 B —— SVG 路径
+
+### 1. 选择风格
+
+读取 `references/style-diagram-matrix.md` 快速选择风格，然后读取对应的风格参考文件：
+
+| 风格 | 参考文件 | 适用场景 |
+|------|----------|----------|
+| Flat Icon（默认） | `references/style-1-flat-icon.md` | 文档、博客、演示 |
+| Dark Terminal | `references/style-2-dark-terminal.md` | GitHub README、技术博客 |
+| Blueprint | `references/style-3-blueprint.md` | 架构文档、RFC |
+| Notion Clean | `references/style-4-notion-clean.md` | Notion 嵌入、Wiki |
+| Glassmorphism | `references/style-5-glassmorphism.md` | 营销页、发布会 |
+
+**风格快速判断**：
+- 用户说"暗色/dark/terminal/GitHub" → Dark Terminal
+- 用户说"蓝图/blueprint/工程" → Blueprint
+- 用户说"简洁/clean/Notion" → Notion Clean
+- 用户说"毛玻璃/glass/现代" → Glassmorphism
+- 默认或"文档/博客" → Flat Icon
+
+### 2. 生成 SVG
+
+读取选定的风格参考文件和 `references/icons.md`，按照以下步骤生成 SVG：
+
+1. 以风格参考文件中的 **SVG 模板** 为起点
+2. 根据内容规划布局（节点位置、连线路径）
+3. 使用 `references/icons.md` 中的 **语义图形** 表示不同类型的组件
+4. 使用 **产品图标** 标识具体产品/服务
+5. 使用 **箭头语义** 区分不同类型的数据流
+6. 当使用 2+ 种箭头类型时，添加 **图例**
+7. 所有文字标签使用中文
+
+**关键约束**：
+- **禁止 `@import url()`**——rsvg-convert 无法获取外部资源
+- 字体通过内联 `<style>` 声明
+- viewBox 根据实际内容调整
+
+### 3. 写入 SVG 文件并渲染
+
+先用 `Write` 工具将 SVG 写入 `.svg` 文件，然后调用：
 
 ```bash
 node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
-  --content "<mermaid 源码>" \
-  --name    <输出文件基础名，不含扩展名> \
+  --engine svg \
+  --file <路径/diagram.svg> \
+  --name <输出文件基础名> \
+  --style <风格名> \
   --output-dir <保存目录>
 ```
 
-脚本执行完毕后，最后一行输出 JSON，包含两个输出文件的绝对路径：
+---
+
+## 第四步 —— 展示图片给用户
+
+脚本最后一行输出 JSON，包含输出文件路径：
 
 ```json
-{"md":"/workspace/project/task_flow.md","png":"/workspace/project/task_flow.png"}
+{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"tokyo-night","renderer":"beautiful-mermaid"}
 ```
-
-### 第四步 —— 展示图片给用户
 
 使用 `Read` 工具读取 `.png` 路径，将渲染好的图片内联展示在对话中。
 
 ---
 
-## 命令行参数说明
+## 语义图形速查表
+
+使用 SVG 引擎时，根据组件类型选择对应图形（详见 `references/icons.md`）：
+
+| 图形 | 含义 | 使用时机 |
+|------|------|----------|
+| 双边框圆角矩形 + ⚡ | LLM / 模型 | 大语言模型调用 |
+| 六边形 | Agent / 编排器 | 自主代理、编排 |
+| 圆柱体 + 内环 | 向量数据库 | Pinecone、Weaviate 等 |
+| 圆柱体 | 传统数据库 | PostgreSQL、Redis 等 |
+| 矩形 + ⚙ | 工具 / 函数 | API 调用、工具执行 |
+| 菱形 | 决策点 | 条件判断 |
+| 圆形 + 身体 | 用户 | 人类交互入口 |
+| 虚线矩形 | 记忆节点 | 短期/长期记忆 |
+| 水平管道 | 队列 / 消息流 | Kafka、RabbitMQ 等 |
+| 小六边形 | API 网关 | 请求路由 |
+| 红绿灯矩形 | 浏览器 | Web 客户端 |
+| 折角矩形 | 文档 | 配置文件、日志 |
+
+---
+
+## 箭头语义速查表
+
+| 类型 | 线型 | 含义 |
+|------|------|------|
+| 实线 2px | `stroke-width="2"` | 主数据流 |
+| 虚线 1.5px | `stroke-dasharray="5,3"` | 记忆/缓存写入 |
+| 点线 1.5px | `stroke-dasharray="4,2"` | 异步事件 |
+| 曲线 1.5px | 贝塞尔曲线 | 反馈/循环 |
+
+**颜色编码**：蓝=主数据流，红=错误/备选，绿=数据写入，紫=异步事件。
+
+**规则**：使用 2+ 种箭头类型时，必须在左下角添加图例。
+
+---
+
+## 产品图标速查表
+
+常用产品（完整列表见 `references/icons.md`）：
+
+| 类别 | 产品 | 品牌色 |
+|------|------|--------|
+| AI/ML | OpenAI `#10A37F` · Anthropic `#D97757` · Gemini `#4285F4` · LLaMA `#0467DF` · Mistral `#FF7000` |
+| RAG | LangChain `#1C3C3C` · LlamaIndex `#8B5CF6` · CrewAI `#EF4444` · Mem0 `#6366F1` |
+| 向量库 | Pinecone `#1C1C2E` · Weaviate `#FA0050` · Qdrant `#DC244C` · Chroma `#FF6B35` |
+| 数据库 | PostgreSQL `#336791` · MySQL `#4479A1` · MongoDB `#47A248` · Redis `#DC382D` |
+| 消息队列 | Kafka `#231F20` · RabbitMQ `#FF6600` |
+| 云平台 | AWS `#FF9900` · GCP `#4285F4` · Azure `#0089D6` · Docker `#2496ED` · K8s `#326CE5` |
+
+---
+
+## 命令行参数
 
 ```
 node code_to_diagram.js render [选项]
 
-选项：
-  --content,    -c  <字符串>   Mermaid 源码（与 --file 二选一）
-  --file,       -f  <路径>     已有的 .mmd 文件路径（与 --content 二选一，推荐）
-  --name,       -n  <字符串>   输出文件基础名，不含扩展名（默认：diagram）
-  --output-dir, -o  <路径>     输出目录（默认：当前工作目录，不存在时自动创建）
-  --theme,      -t  <主题>     default | forest | dark | neutral（默认：dark）
-  --width,      -W  <像素>     画布宽度（默认：2400）
-  --height,     -H  <像素>     画布高度（默认：4000）
-  --scale,      -s  <倍数>     Puppeteer 缩放系数（默认：3）
-  --bg,         -b  <颜色>     背景颜色（默认：#0d1117）
-  --help,       -h             显示帮助信息
+通用选项：
+  --file,       -f  <路径>      输入文件（.mmd 或 .svg）
+  --content,    -c  <字符串>    Mermaid 源码（仅 mermaid 引擎）
+  --name,       -n  <字符串>    输出文件基础名（默认：diagram）
+  --output-dir, -o  <路径>      输出目录（默认：当前工作目录）
+  --engine,     -e  <引擎>      mermaid | svg（默认：mermaid）
+  --help,       -h              帮助信息
+
+Mermaid 引擎（beautiful-mermaid，默认）：
+  --theme,      -t  <主题>      15 个内置主题（默认：github-dark）
+  --renderer        <渲染器>    auto | beautiful-mermaid | mmdc（默认：auto）
+  --padding         <像素>      画布内边距（默认：40）
+  --transparent                 透明背景
+  --bg,         -b  <颜色>      自定义背景色（覆盖主题）
+
+mmdc 回退选项：
+  --width,      -W  <像素>      画布宽度（默认：2400）
+  --height,     -H  <像素>      画布高度（默认：4000）
+  --scale,      -s  <倍数>      缩放系数（默认：3）
+
+SVG 引擎：
+  --style       <风格>          flat-icon | dark-terminal | blueprint | notion-clean | glassmorphism
+  --svg-width   <像素>          输出宽度（默认：1920）
 ```
 
 ---
 
 ## 依赖说明
 
-本 Skill 依赖 **mermaid-cli**（`mmdc`）。
+**Mermaid 引擎**：
 
-脚本会自动查找系统中的 `mmdc`。如果未找到，会自动通过 `npx` 调用，无需手动安装。
-前提是系统中已有 **Node.js**（包含 npx）。
+- **beautiful-mermaid**（主要）：`npm install`（在 `scripts/` 目录下）
+- **rsvg-convert**（必需）：将 SVG 转换为 PNG
+- **mmdc**（可选，仅回退时需要）：处理 gantt、mindmap、pie、journey、gitgraph
 
----
+**SVG 引擎**：依赖 `rsvg-convert`（来自 librsvg）。
 
-## 使用示例
-
-### 推荐方式：先写文件再渲染
-
-Claude 先用 Write 工具创建 `.mmd` 文件，然后调用脚本渲染：
+**安装 rsvg-convert**：
 
 ```bash
-node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
-  --file /workspace/myproject/state_machine.mmd \
-  --name state_machine \
-  --output-dir /workspace/myproject
+# macOS
+brew install librsvg
+
+# Debian / Ubuntu
+apt-get install librsvg2-bin
 ```
 
-### 用亮色主题重新渲染已有的 .mmd 文件
+**安装 beautiful-mermaid**：
 
 ```bash
-node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
-  --file /workspace/myproject/state_machine.mmd \
-  --theme default \
-  --bg white \
-  --output-dir /workspace/myproject
+cd ~/.claude/skills/code-to-diagram/scripts
+npm install
 ```
-
-### 绘制系统架构图
-
-使用 `flowchart TB` + `subgraph` 绘制分层架构：
-
-```mermaid
-flowchart TB
-    subgraph 客户端层["客户端层"]
-        A[Web App]
-        B[Mobile App]
-    end
-    subgraph 服务层["服务层"]
-        C[API Gateway]
-        D[User Service]
-        E[Order Service]
-    end
-    subgraph 数据层["数据层"]
-        F[(PostgreSQL)]
-        G[(Redis Cache)]
-    end
-    A --> C
-    B --> C
-    C --> D
-    C --> E
-    D --> F
-    E --> F
-    D --> G
-```
-
-使用 C4 Model 绘制标准化架构图（需要 mermaid-cli 10.6+）：
-
-```mermaid
-C4Context
-    title 电商系统架构图
-    Person(user, "用户", "系统使用者")
-    System(web_app, "Web应用", "提供用户界面")
-    System(api, "API服务", "业务逻辑处理")
-    SystemDb(db, "数据库", "PostgreSQL")
-    Rel(user, web_app, "使用", "HTTPS")
-    Rel(web_app, api, "调用", "REST API")
-    Rel(api, db, "读写", "TCP/IP")
-```
-
----
-
-## 输出文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `<输出目录>/<名称>.md` | 包含 Mermaid 源码的 Markdown 文档，可在 GitHub / 编辑器中直接预览图表 |
-| `<输出目录>/<名称>.png` | 高分辨率渲染图片（默认 scale=3，有效分辨率 7200×12000） |
