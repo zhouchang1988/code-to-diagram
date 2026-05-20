@@ -1,7 +1,7 @@
 ---
 name: "code-to-diagram"
 description: "分析源代码逻辑，生成 Mermaid 流程图或 SVG 架构图并渲染为 PNG 图片。支持 15 种主题、5 种视觉风格、语义图形体系和 40+ 产品图标。"
-version: "3.0.0"
+version: "2.0.0"
 tags: ["diagram", "mermaid", "svg", "flowchart", "visualization", "code-analysis", "architecture", "beautiful-mermaid"]
 bindShells: ["ClaudeCode"]
 ---
@@ -168,7 +168,7 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
 
 ---
 
-## 第四步 —— 展示图片给用户
+## 第四步 —— 告知用户图片路径
 
 脚本最后一行输出 JSON，包含输出文件路径：
 
@@ -176,7 +176,13 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
 {"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"tokyo-night","renderer":"beautiful-mermaid"}
 ```
 
-使用 `Read` 工具读取 `.png` 路径，将渲染好的图片内联展示在对话中。
+**重要：不要使用 `Read` 工具读取 PNG 文件来内联展示图片。** PNG 图片体积大，直接读取会消耗大量上下文窗口，极易导致超限。只需将生成的文件路径告知用户即可，例如：
+
+> 已生成图表：
+> - Markdown: `/path/to/diagram.md`
+> - PNG: `/path/to/diagram.png`
+
+用户可以自行打开文件查看图片。
 
 ---
 

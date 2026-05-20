@@ -1,112 +1,133 @@
 # code-to-diagram
 
-分析源代码逻辑，生成包含 Mermaid 流程图的 Markdown 文件并渲染为 PNG 图片。
+分析源代码逻辑，生成 Mermaid 流程图或 SVG 架构图，并渲染为高清 PNG 图片。
 
 ## 功能特性
 
-- 支持多种图表类型：流程图、状态机、时序图、架构图、ER图等
-- 自动分析代码结构，生成可视化图表
-- 输出高清 PNG 图片（默认 3x 缩放）
-- 同时生成可编辑的 Mermaid 源码文件
-- 支持多种主题：default、forest、dark、neutral
+- **双引擎渲染**：Mermaid（beautiful-mermaid）+ SVG（rsvg-convert）
+- **15 种 Mermaid 主题**：github-dark、tokyo-night、dracula、nord、catppuccin-mocha 等
+- **5 种 SVG 视觉风格**：Flat Icon、Dark Terminal、Blueprint、Notion Clean、Glassmorphism
+- **语义图形体系**：六边形 Agent、圆柱数据库、双边框 LLM 等 12 种组件图形
+- **40+ 产品图标**：OpenAI、Anthropic、PostgreSQL、Kafka、AWS 等
+- **SVG 5 层自动验证**：XML 语法、标签平衡、属性引号、marker 引用、rsvg-convert 验证
+- **mmdc 自动回退**：gantt、mindmap 等不支持的图表类型自动切换 mmdc 渲染
 
 ## 安装
 
 ### 前置要求
 
-- Node.js 16+（包含 npx）
-- mermaid-cli（可选，脚本会自动通过 npx 调用）
+- Node.js 16+
+- rsvg-convert（必需，用于 SVG → PNG 转换）
 
-### 作为 Claude Code Skill 使用
+```bash
+# macOS
+brew install librsvg
 
-将本项目克隆到 Claude 的 skills 目录：
+# Debian / Ubuntu
+apt-get install librsvg2-bin
+```
+
+### 安装 Skill
 
 ```bash
 git clone https://github.com/zhouchang1988/code-to-diagram.git ~/.claude/skills/code-to-diagram
+cd ~/.claude/skills/code-to-diagram/scripts
+npm install
+```
+
+也可以克隆到任意目录后创建软链接：
+
+```bash
+git clone https://github.com/zhouchang1988/code-to-diagram.git ~/projects/code-to-diagram
+ln -s ~/projects/code-to-diagram ~/.claude/skills/code-to-diagram
+cd ~/projects/code-to-diagram/scripts && npm install
 ```
 
 ## 使用方法
 
-### 基本用法
+### Mermaid 引擎
 
 ```bash
-node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
-  --file /path/to/diagram.mmd \
-  --name output_name \
-  --output-dir /path/to/output
+# 基本用法（默认 github-dark 主题）
+node scripts/code_to_diagram.js render -f diagram.mmd -n output -o ./output
+
+# 指定主题
+node scripts/code_to_diagram.js render -f diagram.mmd -t tokyo-night -n output -o ./output
+
+# 直接传入 Mermaid 源码
+node scripts/code_to_diagram.js render -c 'flowchart LR\n    A --> B' -t dracula -n output
+
+# 透明背景
+node scripts/code_to_diagram.js render -f diagram.mmd --transparent -n output
+
+# 自定义背景色
+node scripts/code_to_diagram.js render -f diagram.mmd --bg "#1a1b26" -n output
+
+# 强制使用 mmdc 渲染
+node scripts/code_to_diagram.js render -f diagram.mmd --renderer mmdc -n output
+```
+
+### SVG 引擎
+
+```bash
+# 暗色终端风格
+node scripts/code_to_diagram.js render -e svg -f arch.svg --style dark-terminal -n output
+
+# Notion 简洁风格
+node scripts/code_to_diagram.js render -e svg -f arch.svg --style notion-clean -n output
 ```
 
 ### 命令行参数
 
 | 参数 | 简写 | 说明 | 默认值 |
 |------|------|------|--------|
-| `--content` | `-c` | Mermaid 源码字符串 | - |
-| `--file` | `-f` | .mmd 文件路径（推荐） | - |
+| `--file` | `-f` | 输入文件（.mmd 或 .svg） | — |
+| `--content` | `-c` | Mermaid 源码字符串 | — |
 | `--name` | `-n` | 输出文件基础名 | diagram |
 | `--output-dir` | `-o` | 输出目录 | 当前目录 |
-| `--theme` | `-t` | 主题 (default/forest/dark/neutral) | dark |
-| `--width` | `-W` | 画布宽度（像素） | 2400 |
-| `--height` | `-H` | 画布高度（像素） | 4000 |
-| `--scale` | `-s` | 缩放系数 | 3 |
-| `--bg` | `-b` | 背景颜色 | #0d1117 |
+| `--engine` | `-e` | mermaid \| svg | mermaid |
+| `--theme` | `-t` | 15 个内置主题 | github-dark |
+| `--style` | — | SVG 风格（5 种） | flat-icon |
+| `--renderer` | — | auto \| beautiful-mermaid \| mmdc | auto |
+| `--transparent` | — | 透明背景 | — |
+| `--bg` | `-b` | 自定义背景色 | — |
+| `--padding` | — | 画布内边距（px） | 40 |
+
+### 可用主题
+
+**暗色：** github-dark · tokyo-night · tokyo-night-storm · catppuccin-mocha · nord · dracula · one-dark · solarized-dark · zinc-dark
+
+**亮色：** github-light · tokyo-night-light · catppuccin-latte · nord-light · solarized-light · zinc-light
 
 ## 支持的图表类型
 
-| 图表类型 | Mermaid 语法 | 适用场景 |
-|---------|-------------|---------|
-| 流程图 | `flowchart TD/LR/TB` | 控制流、业务流程 |
-| 状态图 | `stateDiagram-v2` | 状态机、工作流 |
-| 时序图 | `sequenceDiagram` | 接口调用、消息传递 |
-| 类图 | `classDiagram` | 类继承关系 |
-| ER图 | `erDiagram` | 实体关系 |
-| 架构图 | `flowchart TB + subgraph` | 系统架构、分层架构 |
-
-## 示例
-
-### 流程图示例
-
-```mermaid
-flowchart TD
-    A[开始] --> B{条件判断}
-    B -->|是| C[执行操作]
-    B -->|否| D[跳过]
-    C --> E[结束]
-    D --> E
-```
-
-### 架构图示例
-
-```mermaid
-flowchart TB
-    subgraph 客户端层
-        A[Web App]
-        B[Mobile App]
-    end
-    subgraph 服务层
-        C[API Gateway]
-        D[User Service]
-    end
-    subgraph 数据层
-        E[(Database)]
-    end
-    A --> C
-    B --> C
-    C --> D
-    D --> E
-```
+| 代码模式 | 推荐图表类型 | 引擎 |
+|---------|-------------|------|
+| 状态机 / 工作流 | `flowchart TD` / `stateDiagram-v2` | Mermaid |
+| 类继承关系 | `classDiagram` | Mermaid |
+| 接口 / 消息传递 | `sequenceDiagram` | Mermaid |
+| 实体关系 | `erDiagram` | Mermaid |
+| 系统架构 / 分层 | `flowchart TB` + `subgraph` | Mermaid |
+| 数据趋势 / 图表 | `xychart-beta` | Mermaid |
+| AI/Agent 系统图 | 语义图形 + 产品图标 | SVG |
+| 需要品牌图标 | 产品图标 + 风格化 | SVG |
 
 ## 输出文件
 
-执行后会生成两个文件：
+每次渲染生成两个文件 + 终端 JSON 输出：
 
-- `<name>.md` - 包含 Mermaid 源码的 Markdown 文档
-- `<name>.png` - 渲染后的高清图片
+- `<name>.md` — 包含图表源码的 Markdown 文档
+- `<name>.png` — 渲染后的高清 PNG 图片
+
+```json
+{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"tokyo-night","renderer":"beautiful-mermaid"}
+```
 
 ## 依赖
 
-- [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) - Mermaid 命令行渲染工具
-
-脚本会自动检测系统中的 `mmdc` 命令，未找到时会通过 `npx` 自动调用。
+- **beautiful-mermaid** — Mermaid 渲染引擎（主要，`npm install` 安装）
+- **rsvg-convert** — SVG → PNG 转换（必需，系统包）
+- **mmdc** — Mermaid CLI（可选，仅回退时使用）
 
 ## License
 

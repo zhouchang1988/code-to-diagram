@@ -21,10 +21,12 @@ import path from 'path'
 import os from 'os'
 import { execSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { renderMermaidSVG, THEMES } from 'beautiful-mermaid'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Dynamic import to resolve from script's own directory
+const { renderMermaidSVG, THEMES } = await import('beautiful-mermaid')
 
 // ─── 常量 ─────────────────────────────────────────────────────────────────────
 
@@ -106,8 +108,12 @@ function resolveSvgCssVars(svgString, themeColors) {
   // Remove <style> block and @import (rsvg-convert can't use them)
   let result = svgString.replace(/<style>[\s\S]*?<\/style>/, '')
 
-  // Replace inline style var() on <svg> tag with resolved background
-  result = result.replace(/style="[^"]*"/, `style="background:${bg}"`)
+  // Replace inline style var() on <svg> tag — skip background when transparent
+  if (themeColors.transparent) {
+    result = result.replace(/style="[^"]*"/, '')
+  } else {
+    result = result.replace(/style="[^"]*"/, `style="background:${bg}"`)
+  }
 
   // Replace all var(--xxx) and var(--xxx, fallback) in attributes
   result = result.replace(/var\(([^)]+)\)/g, (match, inner) => {
@@ -166,8 +172,8 @@ function resolveSvgCssVars(svgString, themeColors) {
 
 function detectDiagramType(mmdContent) {
   const firstLine = mmdContent.trim().split('\n')[0].replace(/\s.*/, '').toLowerCase()
-  // Handle stateDiagram-v2 → statediagram
-  const normalized = firstLine.replace(/-v\d+$/, '')
+  // Handle stateDiagram-v2 → statediagram, xychart-beta → xychart
+  const normalized = firstLine.replace(/-v\d+$/, '').replace(/-beta$/, '')
   return BM_SUPPORTED_PREFIXES.includes(normalized) ? normalized : null
 }
 
@@ -193,6 +199,16 @@ function writePuppeteerConfig() {
   const cfg = { args: ['--no-sandbox', '--disable-setuid-sandbox'] }
   const file = path.join(os.tmpdir(), 'code_to_diagram_puppeteer.json')
   fs.writeFileSync(file, JSON.stringify(cfg))
+  return file
+}
+
+function writeChineseFontCss() {
+  const css = `text, .label, .edgeLabel, .nodeLabel, .cluster-label {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans GB',
+               'WenQuanYi Micro Hei', 'Inter', -apple-system, system-ui, sans-serif !important;
+}`
+  const file = path.join(os.tmpdir(), 'code_to_diagram_chinese_font.css')
+  fs.writeFileSync(file, css, 'utf-8')
   return file
 }
 
@@ -341,6 +357,7 @@ function renderWithMmdc(inputMmdPath, pngPath, args) {
   }
 
   const puppeteerCfg = writePuppeteerConfig()
+  const chineseFontCss = writeChineseFontCss()
   const mmdcTheme = MMDC_THEME_MAP[args.theme] || 'dark'
   const bgColor = args.bg || (mmdcTheme === 'dark' ? '#0d1117' : '#ffffff')
 
@@ -354,6 +371,7 @@ function renderWithMmdc(inputMmdPath, pngPath, args) {
     '-H', String(args.height),
     '-s', String(args.scale),
     '-p', puppeteerCfg,
+    '-C', chineseFontCss,
   ]
 
   const cmd = useNpx ? 'npx' : mmdc
@@ -362,6 +380,7 @@ function renderWithMmdc(inputMmdPath, pngPath, args) {
   const result = spawnSync(cmd, mmdcArgs, { stdio: 'inherit', shell: false })
 
   try { fs.unlinkSync(puppeteerCfg) } catch (_) {}
+  try { fs.unlinkSync(chineseFontCss) } catch (_) {}
 
   if (result.status !== 0) {
     console.error(`❌  mmdc 退出码：${result.status}`)
