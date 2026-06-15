@@ -26,6 +26,9 @@ pids/
 # Coverage
 coverage/
 
+# Tests
+tests/
+
 # Build output
 dist/
 build/
