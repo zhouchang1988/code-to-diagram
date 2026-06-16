@@ -10,7 +10,7 @@ bindShells: ["ClaudeCode"]
 
 分析指定目录或文件的源代码，提取控制流 / 数据流逻辑，输出两个文件：
 
-1. **Markdown 文档**（`.md`）：包含图表源码
+1. **Markdown 文档**（`.md`）：包含图表源码和代码逻辑解释文字
 2. **渲染后的 PNG 图片**（高清）
 
 支持两种渲染引擎：
@@ -83,11 +83,12 @@ bindShells: ["ClaudeCode"]
 
 ### 选择主题
 
-15 个内置主题，根据场景推荐：
+16 个内置主题，根据场景推荐：
 
 | 主题 | 类型 | 推荐场景 |
 |------|------|----------|
-| `github-dark`（默认） | 暗色 | GitHub README、技术文档 |
+| `markdown-preview`（默认） | 亮色 | Markdown预览、浅色背景、系统字体 |
+| `github-dark` | 暗色 | GitHub README、技术文档 |
 | `github-light` | 亮色 | 明亮文档、演示文稿 |
 | `tokyo-night` | 暗色 | 优雅暗色、博客 |
 | `tokyo-night-storm` | 暗色 | Tokyo Night 变体 |
@@ -111,7 +112,16 @@ bindShells: ["ClaudeCode"]
 - 用户说"冷色/cold/北欧" → `nord`
 - 用户说"紫色/dracula" → `dracula`
 - 用户说"简约/minimal" → `zinc-dark` 或 `zinc-light`
-- 默认 → `github-dark`
+- 用户说"Markdown预览/浅色/系统字体" → `markdown-preview`
+- 默认 → `markdown-preview`
+
+### 生成逻辑解释文字
+
+在生成图表源码的同时，编写代码逻辑解释文字，包括：
+- 代码的整体结构和主要功能
+- 关键逻辑流程和数据流向
+- 重要的设计模式和架构决策
+- 图表中各组件的作用说明
 
 ### 写入 .mmd 文件并渲染
 
@@ -124,6 +134,14 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
   --name <输出文件基础名> \
   --output-dir <保存目录>
 ```
+
+脚本会生成两个文件：
+1. `<name>.png` — 渲染后的高清 PNG 图片
+2. `<name>.md` — 基础 Markdown 文档（仅包含图表源码）
+
+然后用 `Read` 工具读取生成的 `.md` 文件，用 `Write` 工具补充代码逻辑解释文字，最终内容结构：
+1. 代码逻辑解释文字（中文）
+2. Mermaid 图表源码（代码块）
 
 ---
 
@@ -165,7 +183,15 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
 - 字体通过内联 `<style>` 声明
 - viewBox 根据实际内容调整
 
-### 3. 写入 SVG 文件并渲染
+### 3. 生成逻辑解释文字
+
+在生成 SVG 的同时，编写代码逻辑解释文字，包括：
+- 代码的整体结构和主要功能
+- 关键逻辑流程和数据流向
+- 重要的设计模式和架构决策
+- 图表中各组件的作用说明
+
+### 4. 写入 SVG 文件并渲染
 
 先用 `Write` 工具将 SVG 写入 `.svg` 文件，然后调用：
 
@@ -178,14 +204,28 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
   --output-dir <保存目录>
 ```
 
+脚本会生成两个文件：
+1. `<name>.png` — 渲染后的高清 PNG 图片
+2. `<name>.md` — 基础 Markdown 文档（仅包含图表源码）
+
+然后用 `Read` 工具读取生成的 `.md` 文件，用 `Write` 工具补充代码逻辑解释文字，最终内容结构：
+1. 代码逻辑解释文字（中文）
+2. SVG 图表源码（代码块）
+
 ---
 
-## 第四步 —— 告知用户图片路径
+## 第四步 —— 补充逻辑解释
+
+脚本已生成基础 `.md` 文件（仅包含图表源码），现在用 `Read` 工具读取该文件，然后用 `Write` 工具补充代码逻辑解释文字，最终内容结构：
+1. **代码逻辑解释**：用中文描述代码的整体结构、关键逻辑流程、设计模式和架构决策
+2. **图表源码**：Mermaid 或 SVG 源码（放在代码块中）
+
+### 告知用户文件路径
 
 脚本最后一行输出 JSON，包含输出文件路径：
 
 ```json
-{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"tokyo-night","renderer":"beautiful-mermaid"}
+{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"markdown-preview","renderer":"beautiful-mermaid"}
 ```
 
 **重要：不要使用 `Read` 工具读取 PNG 文件来内联展示图片。** PNG 图片体积大，直接读取会消耗大量上下文窗口，极易导致超限。只需将生成的文件路径告知用户即可，例如：
@@ -263,11 +303,12 @@ node code_to_diagram.js render [选项]
   --help,       -h              帮助信息
 
 Mermaid 引擎（beautiful-mermaid，默认）：
-  --theme,      -t  <主题>      15 个内置主题（默认：github-dark）
+  --theme,      -t  <主题>      16 个内置主题（默认：markdown-preview）
   --renderer        <渲染器>    auto | beautiful-mermaid | mmdc（默认：auto）
   --padding         <像素>      画布内边距（默认：40）
   --transparent                 透明背景
   --bg,         -b  <颜色>      自定义背景色（覆盖主题）
+  --font            <字体>      自定义字体（默认：系统字体）
 
 mmdc 回退选项：
   --width,      -W  <像素>      画布宽度（默认：2400）

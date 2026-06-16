@@ -13,6 +13,9 @@ node_modules/
 *.swo
 *~
 
+# OpenCode
+.omo/
+
 # Logs
 logs/
 *.log

@@ -28,6 +28,19 @@ const __dirname = path.dirname(__filename)
 // Dynamic import to resolve from script's own directory
 const { renderMermaidSVG, THEMES } = await import('beautiful-mermaid')
 
+// ─── 自定义主题 ─────────────────────────────────────────────────────────────
+
+// 添加自定义主题：markdown-preview（浅色背景，简洁线条，系统字体）
+THEMES['markdown-preview'] = {
+  bg: '#ffffff',
+  fg: '#24292f',
+  line: '#d1d9e0',
+  accent: '#0969da',
+  muted: '#57606a',
+  surface: '#f6f8fa',
+  border: '#d1d9e0',
+}
+
 // ─── 常量 ─────────────────────────────────────────────────────────────────────
 
 const BM_SUPPORTED_PREFIXES = [
@@ -53,6 +66,7 @@ const MMDC_THEME_MAP = {
   'solarized-light': 'default',
   'zinc-dark': 'dark',
   'zinc-light': 'default',
+  'markdown-preview': 'default',
 }
 
 // ─── CSS 变量解析（rsvg-convert 不支持 var() 和 color-mix()）──────────────────
@@ -74,7 +88,7 @@ function mixColors(color1, pct1, color2) {
   return rgbToHex(r1*p+r2*(1-p), g1*p+g2*(1-p), b1*p+b2*(1-p))
 }
 
-function resolveSvgCssVars(svgString, themeColors) {
+function resolveSvgCssVars(svgString, themeColors, font) {
   const vars = {
     '--bg': themeColors.bg,
     '--fg': themeColors.fg,
@@ -151,7 +165,8 @@ function resolveSvgCssVars(svgString, themeColors) {
   })
 
   // Add font style inline (since @import was removed)
-  const fontStyle = `<style>text { font-family: 'Inter', -apple-system, system-ui, sans-serif; }</style>`
+  const fontFamily = font || "'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Hiragino Sans GB', 'WenQuanYi Micro Hei', 'Inter', -apple-system, system-ui, sans-serif"
+  const fontStyle = `<style>text { font-family: ${fontFamily}; }</style>`
   result = result.replace('</defs>', `</defs>${fontStyle}`)
 
   // Add background rect (rsvg-convert ignores CSS background property)
@@ -245,7 +260,7 @@ function parseArgs(argv) {
     file:        null,
     name:        'diagram',
     outputDir:   null,
-    theme:       'github-dark',
+    theme:       'markdown-preview',
     renderer:    'auto',     // 'auto' | 'beautiful-mermaid' | 'mmdc'
     padding:     40,
     transparent: false,
@@ -256,6 +271,7 @@ function parseArgs(argv) {
     engine:      'mermaid',
     style:       'flat-icon',
     svgWidth:    1920,
+    font:        null,
   }
 
   let i = 2
@@ -281,6 +297,7 @@ function parseArgs(argv) {
       case '--engine':     case '-e': args.engine       = argv[++i]; break
       case '--style':                 args.style        = argv[++i]; break
       case '--svg-width':             args.svgWidth     = parseInt(argv[++i], 10); break
+      case '--font':                  args.font         = argv[++i]; break
       case '--help':       case '-h': args.command      = 'help'; break
       default:
         console.error(`未知参数：${flag}`)
@@ -315,7 +332,7 @@ function renderWithBeautifulMermaid(mmdContent, args) {
   const svgString = renderMermaidSVG(mmdContent, options)
 
   // 解析 CSS 变量为实际颜色值（rsvg-convert 不支持 var()）
-  const resolvedSvg = resolveSvgCssVars(svgString, { ...themeColors, ...(args.bg ? { bg: args.bg } : {}) })
+  const resolvedSvg = resolveSvgCssVars(svgString, { ...themeColors, ...(args.bg ? { bg: args.bg } : {}) }, args.font)
   return resolvedSvg
 }
 
@@ -392,7 +409,7 @@ function renderWithMmdc(inputMmdPath, pngPath, args) {
 
 function printHelp() {
   console.log(`
-code-to-diagram Skill —— 从代码分析结果生成 Markdown 文档和 PNG 图片
+code-to-diagram Skill —— 从代码分析结果生成 PNG 图片
 
 渲染引擎：
   mermaid  使用 beautiful-mermaid 渲染 .mmd → SVG → PNG（默认）
@@ -412,11 +429,12 @@ code-to-diagram Skill —— 从代码分析结果生成 Markdown 文档和 PNG 
 
 Mermaid 引擎选项（beautiful-mermaid）：
   --theme,      -t  <主题>      ${AVAILABLE_THEMES.join(' | ')}
-                                （默认：github-dark）
+                                （默认：markdown-preview）
   --renderer        <渲染器>    auto | beautiful-mermaid | mmdc（默认：auto）
   --padding         <像素>      画布内边距（默认：40）
   --transparent                 透明背景
   --bg,         -b  <颜色>      自定义背景色（覆盖主题）
+  --font            <字体>      自定义字体（默认：系统字体）
 
 mmdc 回退选项（仅当 renderer=mmdc 或自动回退时）：
   --width,      -W  <像素>      画布宽度（默认：2400）
@@ -427,11 +445,11 @@ SVG 引擎选项：
   --style       <风格>          flat-icon | dark-terminal | blueprint | notion-clean | glassmorphism
   --svg-width   <像素>          输出宽度（默认：1920）
 
-可用主题（15 个）：
+可用主题（16 个）：
   暗色：github-dark, tokyo-night, tokyo-night-storm, catppuccin-mocha,
         nord, dracula, one-dark, solarized-dark, zinc-dark
   亮色：github-light, tokyo-night-light, catppuccin-latte,
-        nord-light, solarized-light, zinc-light
+        nord-light, solarized-light, zinc-light, markdown-preview
 
 示例：
   # beautiful-mermaid 渲染（默认）
@@ -442,6 +460,8 @@ SVG 引擎选项：
 
   # SVG 引擎
   node code_to_diagram.js render -e svg -f arch.svg --style dark-terminal -o ./output
+
+注意：此脚本仅生成 PNG 图片。Markdown 文档（包含代码逻辑解释和图表源码）由 Claude 生成。
 `)
 }
 
@@ -521,7 +541,7 @@ async function cmdRender(args) {
   const kb = (size / 1024).toFixed(1)
   console.log(`✅  PNG 渲染完成：${pngPath}（${kb} KB）`)
 
-  // 生成 Markdown 文档
+  // 生成基础 Markdown 文档（仅包含图表源码）
   const mdPath = path.join(outputDir, `${args.name}.md`)
   const mdFileContent = '```mermaid\n' + mmdContent.trim() + '\n```\n'
   fs.writeFileSync(mdPath, mdFileContent, 'utf-8')
@@ -571,6 +591,7 @@ async function cmdRenderSvg(args) {
   const kb = (size / 1024).toFixed(1)
   console.log(`✅  PNG 渲染完成：${pngPath}（${kb} KB）`)
 
+  // 生成基础 Markdown 文档（仅包含图表源码）
   const mdPath = path.join(outputDir, `${args.name}.md`)
   const mdFileContent = '```svg\n' + svgContent.trim() + '\n```\n'
   fs.writeFileSync(mdPath, mdFileContent, 'utf-8')

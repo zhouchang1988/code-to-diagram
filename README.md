@@ -1,6 +1,6 @@
 # code-to-diagram
 
-分析源代码逻辑，生成 Mermaid 流程图或 SVG 架构图，并渲染为高清 PNG 图片。
+分析源代码逻辑，生成 Mermaid 流程图或 SVG 架构图，并渲染为高清 PNG 图片。同时生成包含代码逻辑解释的 Markdown 文档。
 
 ## 功能特性
 
@@ -86,18 +86,19 @@ node scripts/code_to_diagram.js render -e svg -f arch.svg --style notion-clean -
 | `--name` | `-n` | 输出文件基础名 | diagram |
 | `--output-dir` | `-o` | 输出目录 | 当前目录 |
 | `--engine` | `-e` | mermaid \| svg | mermaid |
-| `--theme` | `-t` | 15 个内置主题 | github-dark |
+| `--theme` | `-t` | 16 个内置主题 | markdown-preview |
 | `--style` | — | SVG 风格（5 种） | flat-icon |
 | `--renderer` | — | auto \| beautiful-mermaid \| mmdc | auto |
 | `--transparent` | — | 透明背景 | — |
 | `--bg` | `-b` | 自定义背景色 | — |
 | `--padding` | — | 画布内边距（px） | 40 |
+| `--font` | — | 自定义字体 | 系统字体 |
 
 ### 可用主题
 
 **暗色：** github-dark · tokyo-night · tokyo-night-storm · catppuccin-mocha · nord · dracula · one-dark · solarized-dark · zinc-dark
 
-**亮色：** github-light · tokyo-night-light · catppuccin-latte · nord-light · solarized-light · zinc-light
+**亮色：** github-light · tokyo-night-light · catppuccin-latte · nord-light · solarized-light · zinc-light · markdown-preview
 
 ## 支持的图表类型
 
@@ -114,13 +115,19 @@ node scripts/code_to_diagram.js render -e svg -f arch.svg --style notion-clean -
 
 ## 输出文件
 
-每次渲染生成两个文件 + 终端 JSON 输出：
+每次渲染生成两个文件：
 
-- `<name>.md` — 包含图表源码的 Markdown 文档
-- `<name>.png` — 渲染后的高清 PNG 图片
+- `<name>.md` — 基础 Markdown 文档（仅包含图表源码，由脚本生成）
+- `<name>.png` — 渲染后的高清 PNG 图片（由脚本生成）
+
+Claude 会读取生成的 `.md` 文件，补充代码逻辑解释文字后，最终内容包含：
+1. 代码逻辑解释（中文）
+2. 图表源码（Mermaid 或 SVG）
+
+终端 JSON 输出：
 
 ```json
-{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"tokyo-night","renderer":"beautiful-mermaid"}
+{"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"markdown-preview","renderer":"beautiful-mermaid"}
 ```
 
 ## 依赖
