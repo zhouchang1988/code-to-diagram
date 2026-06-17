@@ -67,6 +67,13 @@ bindShells: ["ClaudeCode"]
 
 **语言规则**：节点标签、连线说明**必须使用中文**。代码标识符保留原文。
 
+**曲线样式**：如需使用弧线（曲线）连接，在图表开头添加配置：
+```
+%%{ init: { 'flowchart': { 'curve': 'basis' } } }%%
+```
+可选曲线类型：`basis`（平滑）、`monotoneX`、`monotoneY`、`stepBefore`、`stepAfter`。
+> beautiful-mermaid 和 mmdc 都支持曲线配置，无需切换渲染器。
+
 **换行规则**：节点文本中使用 `<br/>` 而非 `\n`。
 
 **特殊字符规则**：
@@ -317,7 +324,8 @@ mmdc 回退选项：
 
 SVG 引擎：
   --style       <风格>          flat-icon | dark-terminal | blueprint | notion-clean | glassmorphism
-  --svg-width   <像素>          输出宽度（默认：1920）
+
+**图片尺寸说明**：beautiful-mermaid 和 SVG 引擎会根据图表内容自动计算最佳输出尺寸（viewBox 宽度 × 16，范围 2400-4800px），确保文字清晰可读。mmdc 渲染器使用固定的画布尺寸。
 ```
 
 ---

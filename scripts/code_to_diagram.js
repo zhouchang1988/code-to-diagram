@@ -19,6 +19,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import crypto from 'crypto'
 import { execSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
@@ -47,6 +48,219 @@ const BM_SUPPORTED_PREFIXES = [
   'graph', 'flowchart', 'statediagram', 'sequencediagram',
   'classdiagram', 'erdiagram', 'xychart',
 ]
+
+// ─── 曲线插值算法 ─────────────────────────────────────────────────────────────
+
+function pointsToCurvePath(points, curveType = 'basis') {
+  if (points.length < 2) return ''
+  
+  switch (curveType) {
+    case 'basis':
+      return basisCurve(points)
+    case 'monotoneX':
+      return monotoneXCurve(points)
+    case 'monotoneY':
+      return monotoneYCurve(points)
+    case 'stepBefore':
+      return stepBeforeCurve(points)
+    case 'stepAfter':
+      return stepAfterCurve(points)
+    default:
+      return basisCurve(points)
+  }
+}
+
+function basisCurve(points) {
+  const n = points.length
+  if (n < 2) return ''
+  if (n === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  }
+  
+  let path = `M${points[0].x},${points[0].y}`
+  
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[Math.min(n - 1, i + 2)]
+    
+    const cp1x = p1.x + (p2.x - p0.x) / 6
+    const cp1y = p1.y + (p2.y - p0.y) / 6
+    const cp2x = p2.x - (p3.x - p1.x) / 6
+    const cp2y = p2.y - (p3.y - p1.y) / 6
+    
+    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`
+  }
+  
+  return path
+}
+
+function monotoneXCurve(points) {
+  const n = points.length
+  if (n < 2) return ''
+  if (n === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  }
+  
+  const tangents = []
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      tangents.push((points[1].y - points[0].y) / (points[1].x - points[0].x))
+    } else if (i === n - 1) {
+      tangents.push((points[n - 1].y - points[n - 2].y) / (points[n - 1].x - points[n - 2].x))
+    } else {
+      const d0 = (points[i].y - points[i - 1].y) / (points[i].x - points[i - 1].x)
+      const d1 = (points[i + 1].y - points[i].y) / (points[i + 1].x - points[i].x)
+      tangents.push((d0 + d1) / 2)
+    }
+  }
+  
+  let path = `M${points[0].x},${points[0].y}`
+  
+  for (let i = 0; i < n - 1; i++) {
+    const dx = points[i + 1].x - points[i].x
+    const cp1x = points[i].x + dx / 3
+    const cp1y = points[i].y + tangents[i] * dx / 3
+    const cp2x = points[i + 1].x - dx / 3
+    const cp2y = points[i + 1].y - tangents[i + 1] * dx / 3
+    
+    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${points[i + 1].x},${points[i + 1].y}`
+  }
+  
+  return path
+}
+
+function monotoneYCurve(points) {
+  const n = points.length
+  if (n < 2) return ''
+  if (n === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  }
+  
+  const tangents = []
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      tangents.push((points[1].x - points[0].x) / (points[1].y - points[0].y))
+    } else if (i === n - 1) {
+      tangents.push((points[n - 1].x - points[n - 2].x) / (points[n - 1].y - points[n - 2].y))
+    } else {
+      const d0 = (points[i].x - points[i - 1].x) / (points[i].y - points[i - 1].y)
+      const d1 = (points[i + 1].x - points[i].x) / (points[i + 1].y - points[i].y)
+      tangents.push((d0 + d1) / 2)
+    }
+  }
+  
+  let path = `M${points[0].x},${points[0].y}`
+  
+  for (let i = 0; i < n - 1; i++) {
+    const dy = points[i + 1].y - points[i].y
+    const cp1x = points[i].x + tangents[i] * dy / 3
+    const cp1y = points[i].y + dy / 3
+    const cp2x = points[i + 1].x - tangents[i + 1] * dy / 3
+    const cp2y = points[i + 1].y - dy / 3
+    
+    path += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${points[i + 1].x},${points[i + 1].y}`
+  }
+  
+  return path
+}
+
+function stepBeforeCurve(points) {
+  const n = points.length
+  if (n < 2) return ''
+  if (n === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  }
+  
+  let path = `M${points[0].x},${points[0].y}`
+  
+  for (let i = 0; i < n - 1; i++) {
+    const midY = (points[i].y + points[i + 1].y) / 2
+    path += ` L${points[i].x},${midY} L${points[i + 1].x},${midY}`
+  }
+  
+  path += ` L${points[n - 1].x},${points[n - 1].y}`
+  
+  return path
+}
+
+function stepAfterCurve(points) {
+  const n = points.length
+  if (n < 2) return ''
+  if (n === 2) {
+    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`
+  }
+  
+  let path = `M${points[0].x},${points[0].y}`
+  
+  for (let i = 0; i < n - 1; i++) {
+    const midX = (points[i].x + points[i + 1].x) / 2
+    path += ` L${midX},${points[i].y} L${midX},${points[i + 1].y}`
+  }
+  
+  path += ` L${points[n - 1].x},${points[n - 1].y}`
+  
+  return path
+}
+
+// ─── SVG 曲线后处理 ─────────────────────────────────────────────────────────────
+
+function parseCurveConfig(mmdContent) {
+  const match = mmdContent.match(/%%\s*\{\s*init\s*:\s*\{\s*'flowchart'\s*:\s*\{\s*'curve'\s*:\s*'([^']+)'\s*\}\s*\}\s*\}\s*%%/)
+  
+  if (match) {
+    const curveType = match[1]
+    const validTypes = ['basis', 'monotoneX', 'monotoneY', 'stepBefore', 'stepAfter']
+    if (validTypes.includes(curveType)) {
+      return curveType
+    }
+  }
+  
+  return null
+}
+
+function parsePoints(pointsStr) {
+  const points = []
+  const pairs = pointsStr.trim().split(/\s+/)
+  
+  for (const pair of pairs) {
+    const [x, y] = pair.split(',').map(Number)
+    if (!isNaN(x) && !isNaN(y)) {
+      points.push({ x, y })
+    }
+  }
+  
+  return points
+}
+
+function convertPolylinesToCurves(svgString, curveType) {
+  const polylineRegex = /<polyline([^>]*)points="([^"]*)"([^>]*)\/>/g
+  
+  return svgString.replace(polylineRegex, (match, before, pointsStr, after) => {
+    const points = parsePoints(pointsStr)
+    
+    if (points.length < 2) {
+      return match
+    }
+    
+    const pathData = pointsToCurvePath(points, curveType)
+    
+    const attrs = (before + after).trim()
+    
+    return `<path ${attrs} d="${pathData}" />`
+  })
+}
+
+function applyCurveToSvg(svgString, mmdContent) {
+  const curveType = parseCurveConfig(mmdContent)
+  
+  if (!curveType) {
+    return svgString
+  }
+  
+  return convertPolylinesToCurves(svgString, curveType)
+}
 
 const AVAILABLE_THEMES = Object.keys(THEMES)
 
@@ -183,6 +397,102 @@ function resolveSvgCssVars(svgString, themeColors, font) {
   return result
 }
 
+// ─── 缓存机制 ─────────────────────────────────────────────────────────────────
+
+const CACHE_DIR = path.join(os.tmpdir(), 'code-to-diagram-cache')
+
+function ensureCacheDir() {
+  if (!fs.existsSync(CACHE_DIR)) {
+    fs.mkdirSync(CACHE_DIR, { recursive: true })
+  }
+}
+
+function generateCacheKey(content, params) {
+  const hash = crypto.createHash('md5')
+  hash.update(content)
+  hash.update(JSON.stringify(params))
+  return hash.digest('hex')
+}
+
+function getCachePath(cacheKey) {
+  return path.join(CACHE_DIR, `${cacheKey}.png`)
+}
+
+function checkCache(cacheKey) {
+  const cachePath = getCachePath(cacheKey)
+  if (fs.existsSync(cachePath)) {
+    return cachePath
+  }
+  return null
+}
+
+function saveToCache(cacheKey, pngPath) {
+  ensureCacheDir()
+  const cachePath = getCachePath(cacheKey)
+  fs.copyFileSync(pngPath, cachePath)
+  return cachePath
+}
+
+// ─── 尺寸自适应 ─────────────────────────────────────────────────────────────
+
+function estimateDiagramComplexity(svgString) {
+  // 统计节点数量（通过常见的 SVG 元素）
+  const nodePatterns = [
+    /<rect[\s>]/g,      // 矩形节点
+    /<circle[\s>]/g,    // 圆形节点
+    /<ellipse[\s>]/g,   // 椭圆节点
+    /<polygon[\s>]/g,   // 多边形节点
+    /<path[\s>]/g,      // 路径节点
+    /<text[\s>]/g,      // 文本节点
+  ]
+  
+  let nodeCount = 0
+  for (const pattern of nodePatterns) {
+    const matches = svgString.match(pattern)
+    if (matches) {
+      nodeCount += matches.length
+    }
+  }
+  
+  // 统计连线数量
+  const edgePatterns = [
+    /<line[\s>]/g,      // 直线
+    /<polyline[\s>]/g,  // 折线
+  ]
+  
+  let edgeCount = 0
+  for (const pattern of edgePatterns) {
+    const matches = svgString.match(pattern)
+    if (matches) {
+      edgeCount += matches.length
+    }
+  }
+  
+  return { nodeCount, edgeCount, totalElements: nodeCount + edgeCount }
+}
+
+function calculateAdaptiveScale(complexity, baseWidth) {
+  const { totalElements } = complexity
+  
+  // 根据元素数量确定缩放因子
+  // 简单图表 (< 15 元素): 8倍放大
+  // 中等图表 (15-40 元素): 12倍放大
+  // 复杂图表 (> 40 元素): 16倍放大
+  let scale
+  if (totalElements < 15) {
+    scale = 8
+  } else if (totalElements < 40) {
+    scale = 12
+  } else {
+    scale = 16
+  }
+  
+  // 计算输出宽度，确保在合理范围内
+  const outputWidth = Math.max(1200, Math.min(4800, Math.round(baseWidth * scale)))
+  
+  return { scale, outputWidth }
+}
+
 // ─── 工具函数 ─────────────────────────────────────────────────────────────────
 
 function detectDiagramType(mmdContent) {
@@ -272,6 +582,7 @@ function parseArgs(argv) {
     style:       'flat-icon',
     svgWidth:    1920,
     font:        null,
+    noCache:     false,
   }
 
   let i = 2
@@ -298,6 +609,7 @@ function parseArgs(argv) {
       case '--style':                 args.style        = argv[++i]; break
       case '--svg-width':             args.svgWidth     = parseInt(argv[++i], 10); break
       case '--font':                  args.font         = argv[++i]; break
+      case '--no-cache':              args.noCache      = true; break
       case '--help':       case '-h': args.command      = 'help'; break
       default:
         console.error(`未知参数：${flag}`)
@@ -329,14 +641,21 @@ function renderWithBeautifulMermaid(mmdContent, args) {
   }
 
   console.log(`🎨  使用 beautiful-mermaid 渲染，主题：${args.theme}`)
-  const svgString = renderMermaidSVG(mmdContent, options)
+  let svgString = renderMermaidSVG(mmdContent, options)
+
+  // 应用曲线转换（如果配置了曲线样式）
+  const curveType = parseCurveConfig(mmdContent)
+  if (curveType) {
+    console.log(`🌊  应用曲线样式：${curveType}`)
+    svgString = applyCurveToSvg(svgString, mmdContent)
+  }
 
   // 解析 CSS 变量为实际颜色值（rsvg-convert 不支持 var()）
   const resolvedSvg = resolveSvgCssVars(svgString, { ...themeColors, ...(args.bg ? { bg: args.bg } : {}) }, args.font)
   return resolvedSvg
 }
 
-function svgToPng(svgString, pngPath, width) {
+function svgToPng(svgString, pngPath, width, enableCache = true) {
   const rsvg = resolveRsvgConvert()
   if (!rsvg) {
     console.error('❌  未找到 rsvg-convert。请安装 librsvg：')
@@ -345,11 +664,43 @@ function svgToPng(svgString, pngPath, width) {
     process.exit(1)
   }
 
+  // 缓存检查
+  if (enableCache) {
+    const complexity = estimateDiagramComplexity(svgString)
+    const viewBoxMatch = svgString.match(/viewBox="([^"]+)"/)
+    let baseWidth = 300
+    if (viewBoxMatch) {
+      [, , baseWidth] = viewBoxMatch[1].split(/\s+/).map(Number)
+    }
+    const { scale, outputWidth: adaptiveWidth } = calculateAdaptiveScale(complexity, baseWidth)
+    const finalWidth = width || adaptiveWidth
+
+    const cacheKey = generateCacheKey(svgString, { width: finalWidth, scale })
+    const cachedPath = checkCache(cacheKey)
+    if (cachedPath) {
+      console.log(`⚡  命中缓存，跳过渲染`)
+      fs.copyFileSync(cachedPath, pngPath)
+      return
+    }
+  }
+
   const tmpSvg = path.join(os.tmpdir(), `bm_${Date.now()}.svg`)
   fs.writeFileSync(tmpSvg, svgString, 'utf-8')
 
-  const rsvgArgs = ['-w', String(width), tmpSvg, '-o', pngPath]
-  console.log(`    rsvg-convert -w ${width} → ${pngPath}`)
+  const viewBoxMatch = svgString.match(/viewBox="([^"]+)"/)
+  let outputWidth = width || 2400
+  let scaleInfo = ''
+
+  if (viewBoxMatch) {
+    const [, , vbWidth] = viewBoxMatch[1].split(/\s+/).map(Number)
+    const complexity = estimateDiagramComplexity(svgString)
+    const { scale, outputWidth: adaptiveWidth } = calculateAdaptiveScale(complexity, vbWidth)
+    outputWidth = width || adaptiveWidth
+    scaleInfo = ` (元素: ${complexity.totalElements}, 缩放: ${scale}x)`
+  }
+
+  const rsvgArgs = ['-w', String(outputWidth), tmpSvg, '-o', pngPath]
+  console.log(`    rsvg-convert -w ${outputWidth} → ${pngPath}${scaleInfo}`)
 
   const result = spawnSync(rsvg, rsvgArgs, { stdio: 'inherit' })
 
@@ -358,6 +709,13 @@ function svgToPng(svgString, pngPath, width) {
   if (result.status !== 0) {
     console.error(`❌  rsvg-convert 退出码：${result.status}`)
     process.exit(result.status ?? 1)
+  }
+
+  if (enableCache) {
+    const complexity = estimateDiagramComplexity(svgString)
+    const cacheKey = generateCacheKey(svgString, { width: outputWidth, scale: complexity.totalElements < 15 ? 8 : complexity.totalElements < 40 ? 12 : 16 })
+    saveToCache(cacheKey, pngPath)
+    console.log(`💾  已保存到缓存`)
   }
 }
 
@@ -425,6 +783,7 @@ code-to-diagram Skill —— 从代码分析结果生成 PNG 图片
   --name,       -n  <字符串>    输出文件基础名（默认：diagram）
   --output-dir, -o  <路径>      输出目录（默认：当前工作目录）
   --engine,     -e  <引擎>      mermaid | svg（默认：mermaid）
+  --no-cache                    禁用缓存，强制重新渲染
   --help,       -h              显示帮助信息
 
 Mermaid 引擎选项（beautiful-mermaid）：
@@ -452,7 +811,7 @@ SVG 引擎选项：
         nord-light, solarized-light, zinc-light, markdown-preview
 
 示例：
-  # beautiful-mermaid 渲染（默认）
+  # beautiful-mermaid 渲染（默认，自动缓存）
   node code_to_diagram.js render -f diagram.mmd -t tokyo-night -o ./output
 
   # 强制使用 mmdc
@@ -460,6 +819,14 @@ SVG 引擎选项：
 
   # SVG 引擎
   node code_to_diagram.js render -e svg -f arch.svg --style dark-terminal -o ./output
+
+  # 禁用缓存，强制重新渲染
+  node code_to_diagram.js render -f diagram.mmd --no-cache -o ./output
+
+特性说明：
+  - 尺寸自适应：根据图表元素数量自动调整输出尺寸（简单图表 8x，中等 12x，复杂 16x）
+  - 自动缓存：相同内容和参数的渲染结果会缓存，加速重复渲染
+  - 缓存位置：系统临时目录下的 code-to-diagram-cache 文件夹
 
 注意：此脚本仅生成 PNG 图片。Markdown 文档（包含代码逻辑解释和图表源码）由 Claude 生成。
 `)
@@ -512,7 +879,7 @@ async function cmdRender(args) {
   if (useBM) {
     try {
       const svgString = renderWithBeautifulMermaid(mmdContent, args)
-      svgToPng(svgString, pngPath, args.svgWidth || 1920)
+      svgToPng(svgString, pngPath, null, !args.noCache)
     } catch (err) {
       console.log(`⚠️  beautiful-mermaid 渲染失败，回退到 mmdc：${err.message}`)
       useBM = false
@@ -580,7 +947,7 @@ async function cmdRenderSvg(args) {
   }
 
   const pngPath = path.join(outputDir, `${args.name}.png`)
-  svgToPng(svgContent, pngPath, args.svgWidth)
+  svgToPng(svgContent, pngPath, null, !args.noCache)
 
   if (!fs.existsSync(pngPath)) {
     console.error('❌  渲染完成但未找到 PNG 文件。')
