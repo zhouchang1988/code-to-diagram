@@ -8,10 +8,12 @@ bindShells: ["ClaudeCode"]
 
 # Code-to-Diagram Skill
 
-分析指定目录或文件的源代码，提取控制流 / 数据流逻辑，输出两个文件：
+分析指定目录或文件的源代码，提取控制流 / 数据流逻辑，输出文件：
 
 1. **Markdown 文档**（`.md`）：包含图表源码和代码逻辑解释文字
-2. **渲染后的 PNG 图片**（高清）
+2. **渲染后的 PNG 图片**（高清，用户不需要图片时可跳过）
+
+> Mermaid 路径中用于渲染的 `.mmd` 中间文件会在渲染完成后自动删除，最终只保留 `.md` 和 `.png`。
 
 支持两种渲染引擎：
 
@@ -203,7 +205,7 @@ Mermaid 对语法要求严格。写入 `.mmd` 文件前，逐项检查：
 
 ### 前置检测
 
-渲染前必须检测依赖工具是否已安装：
+渲染前必须检测依赖工具是否已安装（使用 `--no-png` 不生成图片时可跳过本步骤）：
 
 ```bash
 which rsvg-convert
@@ -249,6 +251,18 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
 脚本会生成两个文件：
 1. `<name>.png` — 渲染后的高清 PNG 图片
 2. `<name>.md` — 基础 Markdown 文档（仅包含图表源码）
+
+渲染成功后脚本会**自动删除输入的 `.mmd` 中间文件**，最终只保留 `.md` 和 `.png`。
+
+如果用户明确表示**不需要图片**，在命令中加 `--no-png` 参数，此时只生成 `.md` 文件，不调用渲染器（也无需检测 `rsvg-convert`）：
+
+```bash
+node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
+  --file <路径/diagram.mmd> \
+  --name <输出文件基础名> \
+  --output-dir <保存目录> \
+  --no-png
+```
 
 然后用 `Read` 工具读取生成的 `.md` 文件，用 `Write` 工具补充代码逻辑解释文字，最终内容结构：
 1. 代码逻辑解释文字（中文）
@@ -348,6 +362,8 @@ node ~/.claude/skills/code-to-diagram/scripts/code_to_diagram.js render \
 ```json
 {"md":"/path/to/diagram.md","png":"/path/to/diagram.png","engine":"mermaid","theme":"markdown-preview","renderer":"beautiful-mermaid"}
 ```
+
+使用 `--no-png` 时 `png` 字段为 `null`：
 
 **重要：不要使用 `Read` 工具读取 PNG 文件来内联展示图片。** PNG 图片体积大，直接读取会消耗大量上下文窗口，极易导致超限。只需将生成的文件路径告知用户即可，例如：
 

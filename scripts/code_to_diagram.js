@@ -593,6 +593,7 @@ function parseArgs(argv) {
     svgWidth:    1920,
     font:        null,
     noCache:     false,
+    noPng:       false,
   }
 
   let i = 2
@@ -620,6 +621,7 @@ function parseArgs(argv) {
       case '--svg-width':             args.svgWidth     = parseInt(argv[++i], 10); break
       case '--font':                  args.font         = argv[++i]; break
       case '--no-cache':              args.noCache      = true; break
+      case '--no-png':                args.noPng        = true; break
       case '--help':       case '-h': args.command      = 'help'; break
       default:
         console.error(`未知参数：${flag}`)
@@ -794,6 +796,7 @@ code-to-diagram Skill —— 从代码分析结果生成 PNG 图片
   --output-dir, -o  <路径>      输出目录（默认：当前工作目录）
   --engine,     -e  <引擎>      mermaid | svg（默认：mermaid）
   --no-cache                    禁用缓存，强制重新渲染
+  --no-png                      只生成 Markdown 文档，不生成 PNG 图片（仅 mermaid 引擎）
   --help,       -h              显示帮助信息
 
 Mermaid 引擎选项（beautiful-mermaid）：
@@ -833,13 +836,30 @@ SVG 引擎选项：
   # 禁用缓存，强制重新渲染
   node code_to_diagram.js render -f diagram.mmd --no-cache -o ./output
 
+  # 只生成 Markdown 文档，不生成 PNG 图片
+  node code_to_diagram.js render -f diagram.mmd --no-png -o ./output
+
 特性说明：
   - 尺寸自适应：根据图表元素数量自动调整输出尺寸（简单图表 8x，中等 12x，复杂 16x）
   - 自动缓存：相同内容和参数的渲染结果会缓存，加速重复渲染
   - 缓存位置：系统临时目录下的 code-to-diagram-cache 文件夹
+  - 渲染完成后自动删除输入的 .mmd 中间文件，只保留 .md 和 .png
 
 注意：此脚本仅生成 PNG 图片。Markdown 文档（包含代码逻辑解释和图表源码）由 Claude 生成。
 `)
+}
+
+function removeIntermediateMmd(inputMmdPath, cleanupMmd, args) {
+  if (!inputMmdPath) return
+  let removed = false
+  if (cleanupMmd) {
+    try { fs.unlinkSync(inputMmdPath); removed = true } catch (_) {}
+  } else if (args.file && inputMmdPath.endsWith('.mmd')) {
+    try { fs.unlinkSync(inputMmdPath); removed = true } catch (_) {}
+  }
+  if (removed) {
+    console.log(`🧹  已删除中间文件：${inputMmdPath}`)
+  }
 }
 
 async function cmdRender(args) {
@@ -873,6 +893,19 @@ async function cmdRender(args) {
 
   const pngPath = path.join(outputDir, `${args.name}.png`)
 
+  // --no-png：只生成 Markdown 文档，跳过图片渲染
+  if (args.noPng) {
+    removeIntermediateMmd(inputMmdPath, cleanupMmd, args)
+
+    const mdPath = path.join(outputDir, `${args.name}.md`)
+    const mdFileContent = '```mermaid\n' + mmdContent.trim() + '\n```\n'
+    fs.writeFileSync(mdPath, mdFileContent, 'utf-8')
+    console.log(`✅  Markdown 文档已保存：${mdPath}（--no-png，未生成图片）`)
+
+    console.log(JSON.stringify({ md: mdPath, png: null, engine: 'mermaid', theme: args.theme, renderer: null }))
+    return 0
+  }
+
   // 选择渲染器
   const diagramType = detectDiagramType(mmdContent)
   let useBM = false
@@ -905,9 +938,7 @@ async function cmdRender(args) {
     renderWithMmdc(inputMmdPath, pngPath, args)
   }
 
-  if (cleanupMmd && inputMmdPath) {
-    try { fs.unlinkSync(inputMmdPath) } catch (_) {}
-  }
+  removeIntermediateMmd(inputMmdPath, cleanupMmd, args)
 
   if (!fs.existsSync(pngPath)) {
     console.error('❌  渲染完成但未找到 PNG 文件。')
